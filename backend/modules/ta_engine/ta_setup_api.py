@@ -51,6 +51,7 @@ from modules.ta_engine.explanation import get_explanation_engine_v1, get_explana
 from modules.ta_engine.trade_setup import get_trade_setup_generator
 from modules.ta_engine.liquidity import get_liquidity_engine
 from modules.ta_engine.displacement import get_displacement_engine
+from modules.ta_engine.poi import get_poi_engine
 
 
 # =============================================================================
@@ -954,6 +955,15 @@ async def get_ta_setup_v2(
         base_layer=base_layer,
     )
     
+    # =============================================
+    # POI ENGINE — Order Blocks / Supply / Demand
+    # =============================================
+    poi_engine = get_poi_engine()
+    poi = poi_engine.build(
+        candles=candles,
+        displacement=displacement,
+    )
+    
     return {
         "symbol": f"{clean_symbol}USDT",
         "timeframe": normalized_tf,
@@ -981,8 +991,11 @@ async def get_ta_setup_v2(
         # DISPLACEMENT — Impulse/Strength Detection
         "displacement": displacement,
         
-        # CHOCH VALIDATION — Structure Shift Validation (NEW!)
+        # CHOCH VALIDATION — Structure Shift Validation
         "choch_validation": choch_validation,
+        
+        # POI — Order Blocks / Supply / Demand Zones (NEW!)
+        "poi": poi,
         
         # STRUCTURE VISUALIZATION — the explanation layer (HH/HL/LH/LL, BOS/CHOCH)
         "structure_visualization": result.get("structure_visualization", {

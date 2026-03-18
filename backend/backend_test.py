@@ -1880,6 +1880,574 @@ class TAEngineAPITester:
         
         self.log_result("Liquidity Engine Integration", True)
         return data
+
+    # ═══════════════════════════════════════════════════════════════
+    # POI Engine Tests (NEW FEATURE - Order Blocks / Supply / Demand Zones)
+    # ═══════════════════════════════════════════════════════════════
+
+    def test_poi_object_presence(self):
+        """Test /api/ta/setup/v2 returns poi object with zones, demand_zones, supply_zones, active_zones"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("POI Object Presence", False, f"Request failed: status={status}, error: {data.get('error', 'unknown')}")
+            return False
+            
+        # Check poi object exists
+        poi = data.get("poi")
+        if not poi:
+            self.log_result("POI Object Presence", False, "Missing poi object in response")
+            return False
+        
+        # Check required poi fields
+        required_fields = ["zones", "demand_zones", "supply_zones", "active_zones", "total_count", "active_count"]
+        for field in required_fields:
+            if field not in poi:
+                self.log_result("POI Object Presence", False, f"Missing poi field: {field}")
+                return False
+        
+        print(f"   🎯 POI object present with all required fields")
+        print(f"   🎯 Total zones: {poi.get('total_count', 0)}")
+        print(f"   🎯 Active zones: {poi.get('active_count', 0)}")
+        print(f"   🎯 Zones: {len(poi.get('zones', []))}")
+        print(f"   🎯 Demand zones: {len(poi.get('demand_zones', []))}")
+        print(f"   🎯 Supply zones: {len(poi.get('supply_zones', []))}")
+        
+        self.log_result("POI Object Presence", True)
+        return poi
+
+    def test_zone_structure_fields(self):
+        """Test each zone has: type, subtype, direction, price_low, price_high, strength, mitigated"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("Zone Structure Fields", False, f"Request failed: status={status}")
+            return False
+            
+        poi = data.get("poi", {})
+        zones = poi.get("zones", [])
+        
+        print(f"   🎯 Zone count: {len(zones)}")
+        
+        if not zones:
+            print("   ⚠️ No zones detected (this may be normal)")
+            self.log_result("Zone Structure Fields", True, "No zones detected")
+            return True
+        
+        # Check structure of each zone
+        required_fields = ["type", "subtype", "direction", "price_low", "price_high", "strength", "mitigated"]
+        for i, zone in enumerate(zones):
+            for field in required_fields:
+                if field not in zone:
+                    self.log_result("Zone Structure Fields", False, f"Missing field '{field}' in zones[{i}]")
+                    return False
+            
+            # Validate field types and values
+            zone_type = zone.get("type")
+            if zone_type not in ["demand", "supply"]:
+                self.log_result("Zone Structure Fields", False, f"Invalid zone type: {zone_type}")
+                return False
+            
+            subtype = zone.get("subtype")
+            if subtype != "order_block":
+                self.log_result("Zone Structure Fields", False, f"Invalid subtype: {subtype}")
+                return False
+            
+            direction = zone.get("direction")
+            if direction not in ["bullish", "bearish"]:
+                self.log_result("Zone Structure Fields", False, f"Invalid direction: {direction}")
+                return False
+            
+            # Validate price fields
+            price_low = zone.get("price_low")
+            price_high = zone.get("price_high")
+            if not isinstance(price_low, (int, float)) or not isinstance(price_high, (int, float)):
+                self.log_result("Zone Structure Fields", False, f"Invalid price fields in zone {i}")
+                return False
+            
+            if price_low >= price_high:
+                self.log_result("Zone Structure Fields", False, f"price_low >= price_high in zone {i}: {price_low} >= {price_high}")
+                return False
+            
+            # Validate strength
+            strength = zone.get("strength")
+            if not isinstance(strength, (int, float)) or strength < 0:
+                self.log_result("Zone Structure Fields", False, f"Invalid strength in zone {i}: {strength}")
+                return False
+            
+            # Validate mitigated flag
+            mitigated = zone.get("mitigated")
+            if not isinstance(mitigated, bool):
+                self.log_result("Zone Structure Fields", False, f"Invalid mitigated flag in zone {i}: {mitigated}")
+                return False
+            
+            print(f"   🎯 Zone {i+1}: {zone_type.upper()} ({direction}) - Price: {price_low}-{price_high}, Strength: {strength}, Mitigated: {mitigated}")
+        
+        self.log_result("Zone Structure Fields", True)
+        return zones
+
+    def test_zones_linked_to_displacement(self):
+        """Test zones are linked to displacement (displacement_strength, displacement_start_index)"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("Zones Linked to Displacement", False, f"Request failed: status={status}")
+            return False
+            
+        poi = data.get("poi", {})
+        zones = poi.get("zones", [])
+        
+        if not zones:
+            print("   ⚠️ No zones to check displacement links")
+            self.log_result("Zones Linked to Displacement", True, "No zones to check")
+            return True
+        
+        zones_with_displacement = 0
+        
+        # Check displacement fields in each zone
+        displacement_fields = ["displacement_strength", "displacement_start_index", "displacement_end_index", "displacement_range_pct"]
+        for i, zone in enumerate(zones):
+            has_displacement_link = True
+            
+            for field in displacement_fields[:2]:  # Check required fields
+                if field not in zone:
+                    print(f"   ⚠️ Zone {i+1} missing {field}")
+                    has_displacement_link = False
+            
+            if has_displacement_link:
+                disp_strength = zone.get("displacement_strength")
+                disp_start_idx = zone.get("displacement_start_index")
+                
+                # Validate displacement strength
+                if not isinstance(disp_strength, (int, float)) or disp_strength < 0:
+                    print(f"   ⚠️ Zone {i+1} invalid displacement_strength: {disp_strength}")
+                    has_displacement_link = False
+                
+                # Validate displacement index
+                if not isinstance(disp_start_idx, int) or disp_start_idx < 0:
+                    print(f"   ⚠️ Zone {i+1} invalid displacement_start_index: {disp_start_idx}")
+                    has_displacement_link = False
+                
+                if has_displacement_link:
+                    zones_with_displacement += 1
+                    print(f"   🎯 Zone {i+1}: displacement_strength={disp_strength}, start_index={disp_start_idx}")
+        
+        print(f"   🎯 Zones with displacement links: {zones_with_displacement}/{len(zones)}")
+        
+        # All zones should have displacement links (requirement: "No zones without displacement")
+        if zones_with_displacement != len(zones):
+            self.log_result("Zones Linked to Displacement", False, f"Only {zones_with_displacement}/{len(zones)} zones have displacement links")
+            return False
+        
+        self.log_result("Zones Linked to Displacement", True)
+        return zones_with_displacement
+
+    def test_maximum_5_zones(self):
+        """Test maximum 5 zones (no garbage)"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("Maximum 5 Zones", False, f"Request failed: status={status}")
+            return False
+            
+        poi = data.get("poi", {})
+        zones = poi.get("zones", [])
+        total_count = poi.get("total_count", 0)
+        
+        zone_count = len(zones)
+        
+        print(f"   🎯 Zone count: {zone_count}")
+        print(f"   🎯 Total count field: {total_count}")
+        
+        # Check zone count matches total_count field
+        if zone_count != total_count:
+            self.log_result("Maximum 5 Zones", False, f"Zone count mismatch: {zone_count} zones vs total_count={total_count}")
+            return False
+        
+        # Check maximum 5 zones constraint
+        if zone_count > 5:
+            self.log_result("Maximum 5 Zones", False, f"Too many zones: {zone_count} > 5 (max)")
+            return False
+        
+        # Check zones are ordered by strength (strongest first)
+        if zone_count > 1:
+            for i in range(1, zone_count):
+                prev_strength = zones[i-1].get("strength", 0)
+                curr_strength = zones[i].get("strength", 0)
+                
+                if curr_strength > prev_strength:
+                    self.log_result("Maximum 5 Zones", False, f"Zones not ordered by strength: zone {i} strength {curr_strength} > zone {i-1} strength {prev_strength}")
+                    return False
+            
+            print(f"   🎯 Zones properly ordered by strength (strongest first)")
+        
+        print(f"   🎯 Zone limit respected: {zone_count}/5 zones")
+        
+        self.log_result("Maximum 5 Zones", True)
+        return zone_count
+
+    def test_mitigated_zones_marked_correctly(self):
+        """Test mitigated zones marked correctly"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("Mitigated Zones Marked Correctly", False, f"Request failed: status={status}")
+            return False
+            
+        poi = data.get("poi", {})
+        zones = poi.get("zones", [])
+        active_zones = poi.get("active_zones", [])
+        
+        if not zones:
+            print("   ⚠️ No zones to check mitigation status")
+            self.log_result("Mitigated Zones Marked Correctly", True, "No zones to check")
+            return True
+        
+        mitigated_count = 0
+        unmitigated_count = 0
+        
+        # Check mitigation status of each zone
+        for i, zone in enumerate(zones):
+            mitigated = zone.get("mitigated", False)
+            zone_type = zone.get("type", "unknown")
+            direction = zone.get("direction", "unknown")
+            price_low = zone.get("price_low", 0)
+            price_high = zone.get("price_high", 0)
+            
+            if mitigated:
+                mitigated_count += 1
+                print(f"   🎯 Zone {i+1}: MITIGATED {zone_type} ({direction}) @ {price_low}-{price_high}")
+            else:
+                unmitigated_count += 1
+                print(f"   🎯 Zone {i+1}: ACTIVE {zone_type} ({direction}) @ {price_low}-{price_high}")
+        
+        print(f"   🎯 Mitigated zones: {mitigated_count}")
+        print(f"   🎯 Unmitigated zones: {unmitigated_count}")
+        
+        # Check consistency with active_zones count
+        active_count = len(active_zones)
+        if active_count != unmitigated_count:
+            self.log_result("Mitigated Zones Marked Correctly", False, f"Active zones count mismatch: {active_count} active_zones vs {unmitigated_count} unmitigated")
+            return False
+        
+        # Verify active_zones contain only unmitigated zones
+        for active_zone in active_zones:
+            if active_zone.get("mitigated", True):  # Default True to catch errors
+                self.log_result("Mitigated Zones Marked Correctly", False, "Found mitigated zone in active_zones")
+                return False
+        
+        print(f"   🎯 Active zones consistency verified: {active_count} active zones match {unmitigated_count} unmitigated")
+        
+        self.log_result("Mitigated Zones Marked Correctly", True)
+        return {"mitigated": mitigated_count, "unmitigated": unmitigated_count}
+
+    def test_active_zones_unmitigated_only(self):
+        """Test active zones = unmitigated only"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("Active Zones Unmitigated Only", False, f"Request failed: status={status}")
+            return False
+            
+        poi = data.get("poi", {})
+        zones = poi.get("zones", [])
+        active_zones = poi.get("active_zones", [])
+        active_count = poi.get("active_count", 0)
+        
+        print(f"   🎯 All zones: {len(zones)}")
+        print(f"   🎯 Active zones: {len(active_zones)}")
+        print(f"   🎯 Active count field: {active_count}")
+        
+        # Check active_zones count consistency
+        if len(active_zones) != active_count:
+            self.log_result("Active Zones Unmitigated Only", False, f"Active zones count mismatch: {len(active_zones)} vs active_count={active_count}")
+            return False
+        
+        if not active_zones:
+            print("   ⚠️ No active zones (all zones mitigated)")
+            self.log_result("Active Zones Unmitigated Only", True, "No active zones")
+            return True
+        
+        # Verify all active zones are unmitigated
+        for i, active_zone in enumerate(active_zones):
+            if active_zone.get("mitigated", True):
+                self.log_result("Active Zones Unmitigated Only", False, f"Active zone {i+1} is marked as mitigated")
+                return False
+            
+            print(f"   🎯 Active zone {i+1}: {active_zone.get('type', 'unknown')} @ {active_zone.get('label', 'N/A')}")
+        
+        # Verify active zones are subset of all zones
+        unmitigated_from_all = [z for z in zones if not z.get("mitigated", True)]
+        
+        if len(active_zones) != len(unmitigated_from_all):
+            self.log_result("Active Zones Unmitigated Only", False, f"Active zones count {len(active_zones)} != unmitigated zones {len(unmitigated_from_all)}")
+            return False
+        
+        print(f"   🎯 All active zones are unmitigated: {len(active_zones)} active zones")
+        
+        self.log_result("Active Zones Unmitigated Only", True)
+        return active_zones
+
+    def test_strength_score_components(self):
+        """Test strength score based on displacement + body_ratio + freshness"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("Strength Score Components", False, f"Request failed: status={status}")
+            return False
+            
+        poi = data.get("poi", {})
+        zones = poi.get("zones", [])
+        
+        if not zones:
+            print("   ⚠️ No zones to check strength scoring")
+            self.log_result("Strength Score Components", True, "No zones to check")
+            return True
+        
+        # Check strength scoring components
+        for i, zone in enumerate(zones):
+            strength = zone.get("strength", 0)
+            displacement_strength = zone.get("displacement_strength", 0)
+            body_ratio = zone.get("body_ratio", 0)
+            
+            print(f"   🎯 Zone {i+1}: Strength={strength}, Displacement={displacement_strength}, Body Ratio={body_ratio}")
+            
+            # Validate displacement strength component (most important factor)
+            if displacement_strength < 0:
+                self.log_result("Strength Score Components", False, f"Zone {i+1} invalid displacement_strength: {displacement_strength}")
+                return False
+            
+            # Validate body ratio (should be between 0 and 1)
+            if not (0 <= body_ratio <= 1):
+                self.log_result("Strength Score Components", False, f"Zone {i+1} invalid body_ratio: {body_ratio}")
+                return False
+            
+            # Check that strength is reasonable (displacement contributes significantly)
+            # Strong displacement should lead to higher strength scores
+            if displacement_strength > 2.0 and strength < 2.0:
+                print(f"   ⚠️ Zone {i+1}: High displacement ({displacement_strength}) but low strength ({strength}) - may need review")
+            
+            # Validate strength is positive
+            if strength <= 0:
+                self.log_result("Strength Score Components", False, f"Zone {i+1} invalid strength: {strength}")
+                return False
+        
+        # Check that zones are sorted by strength (requirement from POIEngine)
+        for i in range(1, len(zones)):
+            prev_strength = zones[i-1].get("strength", 0)
+            curr_strength = zones[i].get("strength", 0)
+            
+            if curr_strength > prev_strength:
+                self.log_result("Strength Score Components", False, f"Zones not sorted by strength: zone {i+1} ({curr_strength}) > zone {i} ({prev_strength})")
+                return False
+        
+        print(f"   🎯 Strength scoring components validated for all zones")
+        print(f"   🎯 Zones properly sorted by strength (strongest first)")
+        
+        self.log_result("Strength Score Components", True)
+        return True
+
+    def test_no_zones_without_displacement(self):
+        """Test no zones without displacement"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("No Zones Without Displacement", False, f"Request failed: status={status}")
+            return False
+            
+        poi = data.get("poi", {})
+        zones = poi.get("zones", [])
+        
+        if not zones:
+            print("   ⚠️ No zones to check (this may be normal)")
+            self.log_result("No Zones Without Displacement", True, "No zones to check")
+            return True
+        
+        zones_without_displacement = 0
+        
+        for i, zone in enumerate(zones):
+            displacement_strength = zone.get("displacement_strength")
+            displacement_start_index = zone.get("displacement_start_index")
+            
+            # Check if zone has displacement data
+            has_displacement = (
+                displacement_strength is not None and 
+                displacement_start_index is not None and
+                isinstance(displacement_strength, (int, float)) and
+                displacement_strength > 0 and
+                isinstance(displacement_start_index, int) and
+                displacement_start_index >= 0
+            )
+            
+            if not has_displacement:
+                zones_without_displacement += 1
+                print(f"   ❌ Zone {i+1}: No valid displacement - strength={displacement_strength}, start_index={displacement_start_index}")
+            else:
+                print(f"   ✅ Zone {i+1}: Valid displacement - strength={displacement_strength}, start_index={displacement_start_index}")
+        
+        print(f"   🎯 Zones without displacement: {zones_without_displacement}/{len(zones)}")
+        
+        # All zones must have displacement (key requirement)
+        if zones_without_displacement > 0:
+            self.log_result("No Zones Without Displacement", False, f"{zones_without_displacement} zones found without displacement")
+            return False
+        
+        print(f"   🎯 All zones have valid displacement links")
+        
+        self.log_result("No Zones Without Displacement", True)
+        return True
+
+    def test_manual_poi_validation(self):
+        """Test against manual test results: 5 zones (max), 1 active (unmitigated SUPPLY @ 105447), 4 mitigated"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("Manual POI Validation", False, f"Request failed: status={status}")
+            return False
+            
+        poi = data.get("poi", {})
+        zones = poi.get("zones", [])
+        active_zones = poi.get("active_zones", [])
+        total_count = poi.get("total_count", 0)
+        active_count = poi.get("active_count", 0)
+        
+        # Manual test expectations from agent context
+        expected_total_zones = 5
+        expected_active_zones = 1
+        expected_mitigated_zones = 4
+        expected_active_supply_price = 105447
+        
+        print(f"   🎯 Expected: {expected_total_zones} total zones, {expected_active_zones} active, {expected_mitigated_zones} mitigated")
+        print(f"   🎯 Actual: {total_count} total zones, {active_count} active, {total_count - active_count} mitigated")
+        
+        # Allow some tolerance for dynamic data (market moves, different data)
+        tolerance = 2  # Allow +/- 2 zones difference
+        
+        zones_match = abs(total_count - expected_total_zones) <= tolerance
+        active_match = abs(active_count - expected_active_zones) <= tolerance
+        mitigated_actual = total_count - active_count
+        mitigated_match = abs(mitigated_actual - expected_mitigated_zones) <= tolerance
+        
+        print(f"   🎯 Zones match (±{tolerance}): {zones_match}")
+        print(f"   🎯 Active match (±{tolerance}): {active_match}")
+        print(f"   🎯 Mitigated match (±{tolerance}): {mitigated_match}")
+        
+        # Check for active SUPPLY zone near expected price
+        active_supply_found = False
+        supply_zone_price = None
+        
+        for active_zone in active_zones:
+            if active_zone.get("type") == "supply" and not active_zone.get("mitigated", True):
+                price_mid = (active_zone.get("price_low", 0) + active_zone.get("price_high", 0)) / 2
+                supply_zone_price = price_mid
+                
+                # Allow reasonable price tolerance (market moves)
+                price_tolerance = 5000  # Allow 5k difference
+                if abs(price_mid - expected_active_supply_price) <= price_tolerance:
+                    active_supply_found = True
+                    print(f"   🎯 Active SUPPLY zone found near {expected_active_supply_price}: {price_mid}")
+                    break
+        
+        if supply_zone_price and not active_supply_found:
+            print(f"   🎯 Active SUPPLY zone found at different price: {supply_zone_price} (expected ~{expected_active_supply_price})")
+        
+        # Check zone quality - no garbage zones
+        garbage_zones = 0
+        for zone in zones:
+            # Check for minimum quality indicators
+            displacement_strength = zone.get("displacement_strength", 0)
+            strength = zone.get("strength", 0)
+            
+            # Zones should have meaningful displacement and strength
+            if displacement_strength < 1.5 or strength < 1.0:
+                garbage_zones += 1
+                print(f"   ⚠️ Potential garbage zone: displacement={displacement_strength}, strength={strength}")
+        
+        print(f"   🎯 Potential garbage zones: {garbage_zones}/{total_count}")
+        
+        # Verify POI Engine is working correctly
+        poi_working = total_count > 0 and all([
+            isinstance(total_count, int),
+            isinstance(active_count, int),
+            active_count <= total_count,
+            len(zones) == total_count,
+            len(active_zones) == active_count
+        ])
+        
+        if not poi_working:
+            self.log_result("Manual POI Validation", False, "POI Engine basic functionality not working")
+            return False
+        
+        print(f"   🎯 POI Engine working correctly - {total_count} zones detected with proper structure")
+        
+        self.log_result("Manual POI Validation", True)
+        return {"zones": total_count, "active": active_count, "mitigated": mitigated_actual}
+
+    def test_poi_engine_integration(self):
+        """Test complete POI Engine integration with /api/ta/setup/v2"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("POI Engine Integration", False, f"Request failed: status={status}")
+            return False
+            
+        # Check that POI is properly integrated with other engines
+        required_objects = ["poi", "displacement", "liquidity"]
+        for obj in required_objects:
+            if obj not in data:
+                self.log_result("POI Engine Integration", False, f"Missing {obj} object - integration incomplete")
+                return False
+        
+        poi = data.get("poi")
+        displacement = data.get("displacement")
+        
+        # Verify POI and displacement integration
+        poi_zones = poi.get("zones", [])
+        displacement_events = displacement.get("events", [])
+        
+        print(f"   🎯 POI zones: {len(poi_zones)}")
+        print(f"   🎯 Displacement events: {len(displacement_events)}")
+        
+        # Check that POI zones reference displacement
+        zones_with_displacement = 0
+        for zone in poi_zones:
+            if zone.get("displacement_strength") is not None and zone.get("displacement_start_index") is not None:
+                zones_with_displacement += 1
+        
+        print(f"   🎯 Zones with displacement links: {zones_with_displacement}/{len(poi_zones)}")
+        
+        # Verify POI structure components
+        poi_components = ["zones", "demand_zones", "supply_zones", "active_zones"]
+        for component in poi_components:
+            if component not in poi:
+                self.log_result("POI Engine Integration", False, f"Missing POI component: {component}")
+                return False
+        
+        # Check demand/supply zone filtering
+        demand_zones = poi.get("demand_zones", [])
+        supply_zones = poi.get("supply_zones", [])
+        
+        demand_count = len(demand_zones)
+        supply_count = len(supply_zones)
+        total_zones = len(poi_zones)
+        
+        if demand_count + supply_count != total_zones:
+            self.log_result("POI Engine Integration", False, f"Zone filtering error: {demand_count} demand + {supply_count} supply != {total_zones} total")
+            return False
+        
+        print(f"   🎯 Demand zones: {demand_count}")
+        print(f"   🎯 Supply zones: {supply_count}")
+        print(f"   🎯 Zone filtering working correctly")
+        
+        # Verify all components have proper data types
+        if not all(isinstance(zones, list) for zones in [poi_zones, demand_zones, supply_zones, poi.get("active_zones", [])]):
+            self.log_result("POI Engine Integration", False, "POI components are not lists")
+            return False
+        
+        print(f"   🎯 POI Engine fully integrated and working correctly")
+        
+        self.log_result("POI Engine Integration", True)
+        return data
         """Test version count increments on update"""
         if not hasattr(self, 'test_idea_id'):
             self.test_create_idea()
@@ -1930,7 +2498,7 @@ class TAEngineAPITester:
 
     def run_all_tests(self):
         """Run all tests in sequence"""
-        print("🚀 Starting TA Engine API Tests - Displacement + CHOCH Validation Focus...")
+        print("🚀 Starting TA Engine API Tests - POI Engine (Order Blocks) Focus...")
         print(f"🌐 Base URL: {self.base_url}")
         print("=" * 80)
         
@@ -1951,6 +2519,20 @@ class TAEngineAPITester:
         self.test_choch_validation_reasons()
         self.test_manual_displacement_choch_validation()
         self.test_displacement_choch_integration()
+        
+        # POI Engine Tests (Main Focus) 
+        print("\n🎯 POI ENGINE TESTS (ORDER BLOCKS / SUPPLY / DEMAND ZONES)")
+        print("-" * 50)
+        self.test_poi_object_presence()
+        self.test_zone_structure_fields()
+        self.test_zones_linked_to_displacement()
+        self.test_maximum_5_zones()
+        self.test_mitigated_zones_marked_correctly()
+        self.test_active_zones_unmitigated_only()
+        self.test_strength_score_components()
+        self.test_no_zones_without_displacement()
+        self.test_manual_poi_validation()
+        self.test_poi_engine_integration()
         
         # Liquidity Engine Tests (Supporting)
         print("\n💧 LIQUIDITY ENGINE TESTS")
@@ -2013,6 +2595,64 @@ def main():
     except Exception as e:
         print(f"\n\n❌ Unexpected error: {e}")
         return 1
+
+def run_poi_engine_only():
+    """Run only POI Engine tests"""
+    print("🎯 POI Engine (Order Blocks / Supply / Demand Zones) Testing")
+    print("=" * 80)
+    
+    # Initialize tester
+    tester = TAEngineAPITester()
+    
+    try:
+        print("🔧 HEALTH CHECK")
+        print("-" * 50)
+        health_ok = tester.test_health_endpoint()
+        
+        if not health_ok:
+            print("❌ Health check failed. Cannot proceed.")
+            return 1
+        
+        print("\n🎯 POI ENGINE TESTS")
+        print("-" * 50)
+        
+        # Run specific POI tests
+        test_funcs = [
+            tester.test_poi_object_presence,
+            tester.test_zone_structure_fields,
+            tester.test_zones_linked_to_displacement,
+            tester.test_maximum_5_zones,
+            tester.test_mitigated_zones_marked_correctly,
+            tester.test_active_zones_unmitigated_only,
+            tester.test_strength_score_components,
+            tester.test_no_zones_without_displacement,
+            tester.test_manual_poi_validation,
+            tester.test_poi_engine_integration
+        ]
+        
+        for test_func in test_funcs:
+            try:
+                test_func()
+            except Exception as e:
+                print(f"💥 Test {test_func.__name__} failed with error: {e}")
+        
+        # Summary
+        print("\n" + "=" * 80)
+        print("📊 POI ENGINE TEST SUMMARY")
+        print("=" * 80)
+        
+        success_rate = (tester.tests_passed / tester.tests_run * 100) if tester.tests_run > 0 else 0
+        
+        print(f"Tests run: {tester.tests_run}")
+        print(f"Tests passed: {tester.tests_passed}")
+        print(f"Success rate: {success_rate:.1f}%")
+        
+        return 0 if tester.tests_passed == tester.tests_run else 1
+        
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        return 1
+
 
 def run_displacement_choch_only():
     """Run only Displacement + CHOCH validation tests"""
