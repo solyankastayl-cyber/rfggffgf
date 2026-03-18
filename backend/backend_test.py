@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 """
-TA Engine API Testing - Multi-Scale Market Hierarchy
+TA Engine Ideas Module API Testing
+==================================
 
-Tests for:
-- 4H (micro/entry) using 4H candles from Coinbase (~200 candles)
-- 1Y (cycle) using daily candles (~2500 candles)
-- Different timeframes produce different patterns (4H ≠ 1D ≠ 30D)
-- Response contains structure analysis (trend, hh, hl, lh, ll)
-- ETH 4H shows descending_triangle (bearish pattern)
-- Health check functionality
+Tests for My Ideas module functionality:
+
+API Endpoints:
+- POST /api/ta/ideas - Create new idea with snapshot
+- GET /api/ta/ideas - List ideas with filters (status, asset, limit)
+- GET /api/ta/ideas/{id} - Get idea with current version
+- POST /api/ta/ideas/{id}/update - Create NEW version (not overwrites)
+- GET /api/ta/ideas/{id}/timeline - Get version history
+- DELETE /api/ta/ideas/{id} - Delete idea
+
+Core Features:
+- Ideas store full snapshots (decision, scenarios, trade_setup, explanation)
+- Version count increments on update
+- Comprehensive versioning and timeline functionality
 """
 
 import requests
@@ -50,6 +58,8 @@ class TAEngineAPITester:
                 response = requests.get(url, timeout=30)
             elif method.upper() == "POST":
                 response = requests.post(url, json=data, timeout=30)
+            elif method.upper() == "DELETE":
+                response = requests.delete(url, timeout=30)
             else:
                 return False, {}, 0
                 
@@ -617,12 +627,421 @@ class TAEngineAPITester:
         return data
 
     # ═══════════════════════════════════════════════════════════════
+    # Ideas Module Tests (My Ideas for TA Engine)
+    # ═══════════════════════════════════════════════════════════════
+
+    def test_create_idea(self):
+        """Test POST /api/ta/ideas creates new idea with snapshot"""
+        test_data = {
+            "asset": "BTCUSDT",
+            "timeframe": "1d",
+            "user_id": "test_user",
+            "tags": ["test", "api"],
+            "notes": "Test idea creation"
+        }
+        
+        success, data, status = self.make_request("POST", "/api/ta/ideas", test_data)
+        
+        if not success or status != 200:
+            self.log_result("Create Idea", False, f"Request failed: status={status}, error: {data.get('error', 'unknown')}")
+            return False
+        
+        # Check response structure
+        if not data.get("ok"):
+            self.log_result("Create Idea", False, f"Response not OK: {data}")
+            return False
+        
+        idea = data.get("idea")
+        if not idea:
+            self.log_result("Create Idea", False, "Missing idea object in response")
+            return False
+        
+        # Check required fields
+        required_fields = ["idea_id", "asset", "timeframe", "versions", "current_version", "technical_bias", "confidence"]
+        for field in required_fields:
+            if field not in idea:
+                self.log_result("Create Idea", False, f"Missing idea field: {field}")
+                return False
+        
+        # Check that idea has one version (initial)
+        versions = idea.get("versions", [])
+        if len(versions) != 1:
+            self.log_result("Create Idea", False, f"Expected 1 version, got {len(versions)}")
+            return False
+        
+        version = versions[0]
+        if version.get("version") != 1:
+            self.log_result("Create Idea", False, f"Expected version 1, got {version.get('version')}")
+            return False
+        
+        # Check that version has setup snapshot
+        setup_snapshot = version.get("setup_snapshot")
+        if not setup_snapshot:
+            self.log_result("Create Idea", False, "Missing setup_snapshot in version")
+            return False
+        
+        print(f"   💡 Created idea: {idea.get('idea_id')}")
+        print(f"   💡 Asset: {idea.get('asset')}")
+        print(f"   💡 Version: {idea.get('current_version')}")
+        print(f"   💡 Bias: {idea.get('technical_bias')}")
+        print(f"   💡 Confidence: {idea.get('confidence')}")
+        
+        self.log_result("Create Idea", True)
+        # Store idea_id for other tests
+        self.test_idea_id = idea.get("idea_id")
+        return idea
+
+    def test_list_ideas(self):
+        """Test GET /api/ta/ideas lists ideas with filters"""
+        # Test basic list
+        success, data, status = self.make_request("GET", "/api/ta/ideas")
+        
+        if not success or status != 200:
+            self.log_result("List Ideas", False, f"Request failed: status={status}, error: {data.get('error', 'unknown')}")
+            return False
+        
+        if not data.get("ok"):
+            self.log_result("List Ideas", False, f"Response not OK: {data}")
+            return False
+        
+        ideas = data.get("ideas", [])
+        count = data.get("count", 0)
+        
+        print(f"   📋 Total ideas: {count}")
+        print(f"   📋 Ideas in response: {len(ideas)}")
+        
+        # Test with filters
+        success2, data2, status2 = self.make_request("GET", "/api/ta/ideas?asset=BTCUSDT&limit=10")
+        
+        if success2 and status2 == 200:
+            filtered_count = data2.get("count", 0)
+            print(f"   📋 Filtered (BTCUSDT): {filtered_count}")
+        
+        # Test with status filter
+        success3, data3, status3 = self.make_request("GET", "/api/ta/ideas?status=active&limit=5")
+        
+        if success3 and status3 == 200:
+            active_count = data3.get("count", 0)
+            print(f"   📋 Active ideas: {active_count}")
+        
+        self.log_result("List Ideas", True)
+        return data
+
+    def test_get_idea(self):
+        """Test GET /api/ta/ideas/{id} returns idea with current version"""
+        if not hasattr(self, 'test_idea_id'):
+            # Create an idea first
+            self.test_create_idea()
+        
+        if not hasattr(self, 'test_idea_id'):
+            self.log_result("Get Idea", False, "No test idea ID available")
+            return False
+        
+        success, data, status = self.make_request("GET", f"/api/ta/ideas/{self.test_idea_id}")
+        
+        if not success or status != 200:
+            self.log_result("Get Idea", False, f"Request failed: status={status}, error: {data.get('error', 'unknown')}")
+            return False
+        
+        if not data.get("ok"):
+            self.log_result("Get Idea", False, f"Response not OK: {data}")
+            return False
+        
+        idea = data.get("idea")
+        if not idea:
+            self.log_result("Get Idea", False, "Missing idea object in response")
+            return False
+        
+        # Check that we got the right idea
+        if idea.get("idea_id") != self.test_idea_id:
+            self.log_result("Get Idea", False, f"Expected idea_id {self.test_idea_id}, got {idea.get('idea_id')}")
+            return False
+        
+        # Check that it has complete data
+        required_fields = ["idea_id", "asset", "versions", "current_version", "created_at", "updated_at"]
+        for field in required_fields:
+            if field not in idea:
+                self.log_result("Get Idea", False, f"Missing idea field: {field}")
+                return False
+        
+        print(f"   🔍 Retrieved idea: {idea.get('idea_id')}")
+        print(f"   🔍 Asset: {idea.get('asset')}")
+        print(f"   🔍 Current version: {idea.get('current_version')}")
+        print(f"   🔍 Status: {idea.get('status')}")
+        print(f"   🔍 Versions count: {len(idea.get('versions', []))}")
+        
+        self.log_result("Get Idea", True)
+        return idea
+
+    def test_update_idea_new_version(self):
+        """Test POST /api/ta/ideas/{id}/update creates NEW version (not overwrites)"""
+        if not hasattr(self, 'test_idea_id'):
+            self.test_create_idea()
+        
+        if not hasattr(self, 'test_idea_id'):
+            self.log_result("Update Idea New Version", False, "No test idea ID available")
+            return False
+        
+        # Get initial version count
+        success_get, data_get, status_get = self.make_request("GET", f"/api/ta/ideas/{self.test_idea_id}")
+        if not success_get or status_get != 200:
+            self.log_result("Update Idea New Version", False, "Failed to get initial idea state")
+            return False
+        
+        initial_idea = data_get.get("idea")
+        initial_version = initial_idea.get("current_version", 1)
+        initial_versions_count = len(initial_idea.get("versions", []))
+        
+        print(f"   🔄 Initial version: {initial_version}")
+        print(f"   🔄 Initial versions count: {initial_versions_count}")
+        
+        # Update the idea
+        success, data, status = self.make_request("POST", f"/api/ta/ideas/{self.test_idea_id}/update")
+        
+        if not success or status != 200:
+            self.log_result("Update Idea New Version", False, f"Request failed: status={status}, error: {data.get('error', 'unknown')}")
+            return False
+        
+        if not data.get("ok"):
+            self.log_result("Update Idea New Version", False, f"Response not OK: {data}")
+            return False
+        
+        updated_idea = data.get("idea")
+        if not updated_idea:
+            self.log_result("Update Idea New Version", False, "Missing idea object in response")
+            return False
+        
+        # Check version increment
+        new_version = updated_idea.get("current_version")
+        new_versions_count = len(updated_idea.get("versions", []))
+        
+        if new_version != initial_version + 1:
+            self.log_result("Update Idea New Version", False, f"Expected version {initial_version + 1}, got {new_version}")
+            return False
+        
+        if new_versions_count != initial_versions_count + 1:
+            self.log_result("Update Idea New Version", False, f"Expected {initial_versions_count + 1} versions, got {new_versions_count}")
+            return False
+        
+        print(f"   🔄 New version: {new_version}")
+        print(f"   🔄 New versions count: {new_versions_count}")
+        print(f"   🔄 Message: {data.get('message')}")
+        
+        self.log_result("Update Idea New Version", True)
+        return updated_idea
+
+    def test_get_idea_timeline(self):
+        """Test GET /api/ta/ideas/{id}/timeline returns version history"""
+        if not hasattr(self, 'test_idea_id'):
+            self.test_create_idea()
+        
+        if not hasattr(self, 'test_idea_id'):
+            self.log_result("Get Idea Timeline", False, "No test idea ID available")
+            return False
+        
+        success, data, status = self.make_request("GET", f"/api/ta/ideas/{self.test_idea_id}/timeline")
+        
+        if not success or status != 200:
+            self.log_result("Get Idea Timeline", False, f"Request failed: status={status}, error: {data.get('error', 'unknown')}")
+            return False
+        
+        if not data.get("ok"):
+            self.log_result("Get Idea Timeline", False, f"Response not OK: {data}")
+            return False
+        
+        # Check timeline structure
+        required_fields = ["idea_id", "asset", "timeframe", "timeline"]
+        for field in required_fields:
+            if field not in data:
+                self.log_result("Get Idea Timeline", False, f"Missing timeline field: {field}")
+                return False
+        
+        timeline = data.get("timeline", [])
+        if not timeline:
+            self.log_result("Get Idea Timeline", False, "Empty timeline")
+            return False
+        
+        # Check timeline entries
+        version_count = 0
+        validation_count = 0
+        
+        for entry in timeline:
+            entry_type = entry.get("type")
+            if entry_type == "version":
+                version_count += 1
+                print(f"   📅 Version {entry.get('version')} - {entry.get('timestamp')} - Bias: {entry.get('technical_bias')}")
+            elif entry_type == "validation":
+                validation_count += 1
+                print(f"   📅 Validation - {entry.get('timestamp')} - Result: {entry.get('result')}")
+        
+        print(f"   📅 Timeline entries: {len(timeline)}")
+        print(f"   📅 Versions: {version_count}")
+        print(f"   📅 Validations: {validation_count}")
+        
+        self.log_result("Get Idea Timeline", True)
+        return data
+
+    def test_delete_idea(self):
+        """Test DELETE /api/ta/ideas/{id} deletes idea"""
+        # Create a separate idea for deletion test
+        test_data = {
+            "asset": "ETHUSDT",
+            "timeframe": "1d",
+            "user_id": "test_user",
+            "notes": "Test idea for deletion"
+        }
+        
+        success_create, data_create, status_create = self.make_request("POST", "/api/ta/ideas", test_data)
+        
+        if not success_create or status_create != 200:
+            self.log_result("Delete Idea", False, "Failed to create test idea for deletion")
+            return False
+        
+        idea_to_delete = data_create.get("idea", {}).get("idea_id")
+        if not idea_to_delete:
+            self.log_result("Delete Idea", False, "No idea ID for deletion test")
+            return False
+        
+        print(f"   🗑️ Deleting idea: {idea_to_delete}")
+        
+        # Delete the idea
+        success, data, status = self.make_request("DELETE", f"/api/ta/ideas/{idea_to_delete}")
+        
+        if success and status == 405:
+            # Method not allowed - check if endpoint exists
+            self.log_result("Delete Idea", False, "DELETE method not allowed - endpoint may not be implemented")
+            return False
+        
+        if not success or status != 200:
+            self.log_result("Delete Idea", False, f"Request failed: status={status}, error: {data.get('error', 'unknown')}")
+            return False
+        
+        if not data.get("ok"):
+            self.log_result("Delete Idea", False, f"Response not OK: {data}")
+            return False
+        
+        # Verify idea is deleted by trying to get it
+        success_verify, data_verify, status_verify = self.make_request("GET", f"/api/ta/ideas/{idea_to_delete}")
+        
+        if success_verify and status_verify == 200:
+            self.log_result("Delete Idea", False, "Idea still exists after deletion")
+            return False
+        elif status_verify == 404:
+            print(f"   🗑️ Idea successfully deleted")
+        
+        print(f"   🗑️ Message: {data.get('message')}")
+        
+        self.log_result("Delete Idea", True)
+        return True
+
+    def test_idea_snapshot_storage(self):
+        """Test idea stores full snapshot (decision, scenarios, trade_setup, explanation)"""
+        if not hasattr(self, 'test_idea_id'):
+            self.test_create_idea()
+        
+        if not hasattr(self, 'test_idea_id'):
+            self.log_result("Idea Snapshot Storage", False, "No test idea ID available")
+            return False
+        
+        success, data, status = self.make_request("GET", f"/api/ta/ideas/{self.test_idea_id}")
+        
+        if not success or status != 200:
+            self.log_result("Idea Snapshot Storage", False, f"Request failed: status={status}")
+            return False
+        
+        idea = data.get("idea")
+        if not idea:
+            self.log_result("Idea Snapshot Storage", False, "Missing idea object")
+            return False
+        
+        versions = idea.get("versions", [])
+        if not versions:
+            self.log_result("Idea Snapshot Storage", False, "No versions in idea")
+            return False
+        
+        # Check first version's snapshot
+        version = versions[0]
+        setup_snapshot = version.get("setup_snapshot")
+        
+        if not setup_snapshot:
+            self.log_result("Idea Snapshot Storage", False, "Missing setup_snapshot")
+            return False
+        
+        # Check for key snapshot components
+        snapshot_fields = ["technical_bias", "bias_confidence", "top_setup"]
+        present_fields = []
+        missing_fields = []
+        
+        for field in snapshot_fields:
+            if field in setup_snapshot:
+                present_fields.append(field)
+            else:
+                missing_fields.append(field)
+        
+        print(f"   📸 Snapshot present fields: {present_fields}")
+        print(f"   📸 Snapshot missing fields: {missing_fields}")
+        print(f"   📸 Snapshot size: {len(str(setup_snapshot))} chars")
+        
+        # Check if snapshot has meaningful content
+        if len(str(setup_snapshot)) < 100:
+            self.log_result("Idea Snapshot Storage", False, "Snapshot appears to be too small")
+            return False
+        
+        self.log_result("Idea Snapshot Storage", True)
+        return setup_snapshot
+
+    def test_version_count_increment(self):
+        """Test version count increments on update"""
+        if not hasattr(self, 'test_idea_id'):
+            self.test_create_idea()
+        
+        if not hasattr(self, 'test_idea_id'):
+            self.log_result("Version Count Increment", False, "No test idea ID available")
+            return False
+        
+        # Get initial state
+        success1, data1, status1 = self.make_request("GET", f"/api/ta/ideas/{self.test_idea_id}")
+        if not success1 or status1 != 200:
+            self.log_result("Version Count Increment", False, "Failed to get initial state")
+            return False
+        
+        initial_version = data1.get("idea", {}).get("current_version", 1)
+        print(f"   🔢 Initial version: {initial_version}")
+        
+        # Update the idea
+        success2, data2, status2 = self.make_request("POST", f"/api/ta/ideas/{self.test_idea_id}/update")
+        if not success2 or status2 != 200:
+            self.log_result("Version Count Increment", False, "Failed to update idea")
+            return False
+        
+        updated_version = data2.get("idea", {}).get("current_version", initial_version)
+        print(f"   🔢 Updated version: {updated_version}")
+        
+        # Verify increment
+        if updated_version != initial_version + 1:
+            self.log_result("Version Count Increment", False, f"Version did not increment correctly: {initial_version} -> {updated_version}")
+            return False
+        
+        # Update again to test further increment
+        success3, data3, status3 = self.make_request("POST", f"/api/ta/ideas/{self.test_idea_id}/update")
+        if success3 and status3 == 200:
+            final_version = data3.get("idea", {}).get("current_version", updated_version)
+            print(f"   🔢 Final version: {final_version}")
+            
+            if final_version != updated_version + 1:
+                self.log_result("Version Count Increment", False, f"Second increment failed: {updated_version} -> {final_version}")
+                return False
+        
+        self.log_result("Version Count Increment", True)
+        return True
+
+    # ═══════════════════════════════════════════════════════════════
     # Test Runner
     # ═══════════════════════════════════════════════════════════════
 
     def run_all_tests(self):
         """Run all tests in sequence"""
-        print("🚀 Starting TA Engine API Tests - ExplanationEngineV2 Focus...")
+        print("🚀 Starting TA Engine API Tests - Ideas Module Focus...")
         print(f"🌐 Base URL: {self.base_url}")
         print("=" * 80)
         
@@ -631,28 +1050,17 @@ class TAEngineAPITester:
         print("-" * 50)
         self.test_health_endpoint()
         
-        # ExplanationEngineV2 Tests (P1 Priority)
-        print("\n📝 EXPLANATION ENGINE V2 TESTS (P1)")
+        # Ideas Module Tests (Main Focus)
+        print("\n💡 IDEAS MODULE TESTS")
         print("-" * 50)
-        self.test_explanation_v2_structure()
-        self.test_explanation_v2_format()
-        self.test_decision_engine_bias()
-        self.test_trade_setup_structure()
-        self.test_scenarios_generation()
-        
-        # Structure Engine V2 tests
-        print("\n🏗️ STRUCTURE ENGINE V2 TESTS")
-        print("-" * 50)
-        self.test_structure_engine_v2_health()
-        self.test_structure_context_fields()
-        self.test_no_dominant_pattern_logic()
-        
-        # Core timeframe tests (sample)
-        print("\n📊 CORE TIMEFRAME TESTS")
-        print("-" * 50)
-        
-        self.test_ta_setup_4h_timeframe()
-        self.test_structure_response_format()
+        self.test_create_idea()
+        self.test_list_ideas()
+        self.test_get_idea()
+        self.test_update_idea_new_version()
+        self.test_get_idea_timeline()
+        self.test_idea_snapshot_storage()
+        self.test_version_count_increment()
+        self.test_delete_idea()
         
         # Print summary
         print("\n" + "=" * 80)
