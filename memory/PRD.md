@@ -57,6 +57,14 @@ Analysis → Decision → Scenario → Execution → Visualization
 - Current test: score 0.79 = VALID CHOCH
 - All 9 backend tests passed (100%)
 
+### 2026-03-18: POI Engine (Order Blocks / Supply / Demand) ✅
+- Order Block = последняя противоположная свеча перед displacement
+- Demand zones (bullish OB) / Supply zones (bearish OB)
+- Зоны ТОЛЬКО от displacement (без мусора)
+- Maximum 5 zones, strength score, mitigated/active status
+- Current test: 5 zones, 1 active (SUPPLY @ 105447), 4 mitigated
+- All tests passed (100%)
+
 ## API Endpoints
 - `GET /api/ta/setup/v2?symbol=BTCUSDT&tf=1D` — Full analysis pipeline
 - `GET /api/health` — Health check
