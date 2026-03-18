@@ -59,12 +59,22 @@ export class MarketMechanicsRenderer {
     this.priceSeries = priceSeries;
     this.renderedSeries = [];
     this.renderedPriceLines = [];
+    this.disposed = false;
+  }
+
+  /**
+   * Check if chart is still valid
+   */
+  isValid() {
+    return !this.disposed && this.chart && this.priceSeries;
   }
 
   /**
    * Clear all rendered market mechanics elements
    */
   clear() {
+    this.disposed = true;
+    
     // Remove series
     this.renderedSeries.forEach(series => {
       try {
@@ -88,12 +98,22 @@ export class MarketMechanicsRenderer {
       }
     });
     this.renderedPriceLines = [];
+    
+    // Clear references
+    this.chart = null;
+    this.priceSeries = null;
   }
 
   /**
    * Render all market mechanics layers
    */
   render(data, options = {}) {
+    // Check if chart is still valid
+    if (!this.isValid()) {
+      console.warn('MarketMechanicsRenderer: Chart is disposed, skipping render');
+      return;
+    }
+
     const {
       showPOI = true,
       showLiquidity = true,
@@ -160,6 +180,9 @@ export class MarketMechanicsRenderer {
   }
 
   _renderPOIZone(zone, timeRange) {
+    // Safety check
+    if (!this.isValid()) return;
+    
     const isDemand = zone.type === 'demand';
     const isActive = !zone.mitigated;
     
@@ -244,6 +267,9 @@ export class MarketMechanicsRenderer {
   // ═══════════════════════════════════════════════════════════════
 
   renderLiquidityLines(liquidity, maxLines = 4) {
+    // Safety check
+    if (!this.isValid()) return;
+    
     const pools = liquidity.pools || [];
     
     // Filter to strongest pools only

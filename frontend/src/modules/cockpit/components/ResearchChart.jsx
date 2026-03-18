@@ -259,9 +259,19 @@ const ResearchChart = ({
   useEffect(() => {
     if (!chartRef.current || candles.length === 0) return;
 
-    // Cleanup
+    // Cleanup previous Market Mechanics renderer FIRST
+    if (mmRendererRef.current) {
+      mmRendererRef.current.clear();
+      mmRendererRef.current = null;
+    }
+
+    // Cleanup chart
     if (chartInstanceRef.current) {
-      chartInstanceRef.current.remove();
+      try {
+        chartInstanceRef.current.remove();
+      } catch (e) {
+        // Chart may already be disposed
+      }
       chartInstanceRef.current = null;
     }
 
@@ -677,12 +687,22 @@ const ResearchChart = ({
 
     return () => {
       ro.disconnect();
+      // Cleanup Market Mechanics first
+      if (mmRendererRef.current) {
+        mmRendererRef.current.clear();
+        mmRendererRef.current = null;
+      }
+      // Then cleanup chart
       if (chartInstanceRef.current) {
-        chartInstanceRef.current.remove();
+        try {
+          chartInstanceRef.current.remove();
+        } catch (e) {
+          // Chart may already be disposed
+        }
         chartInstanceRef.current = null;
       }
     };
-  }, [candles, chartType, height, levels, setup, pattern, baseLayer, structureVisualization, tradeSetup, showLevels, showPattern, showBaseLayer, showStructure, showTargets, showExecutionOverlay]);
+  }, [candles, chartType, height, levels, setup, pattern, baseLayer, structureVisualization, tradeSetup, showLevels, showPattern, showBaseLayer, showStructure, showTargets, showExecutionOverlay, poi, liquidity, chochValidation, displacement, showMarketMechanics, showPOI, showLiquidity, showSweeps, showCHOCH]);
 
   const direction = pattern?.direction || setup?.direction || 'neutral';
   const confidence = pattern?.total_score || pattern?.confidence || setup?.confidence || 0;
