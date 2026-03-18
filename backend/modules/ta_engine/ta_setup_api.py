@@ -49,6 +49,7 @@ from modules.ta_engine.structure import get_structure_visualization_builder
 from modules.ta_engine.intelligence import build_mtf_context
 from modules.ta_engine.explanation import get_explanation_engine_v1, get_explanation_engine_v2
 from modules.ta_engine.trade_setup import get_trade_setup_generator
+from modules.ta_engine.liquidity import get_liquidity_engine
 
 
 # =============================================================================
@@ -929,6 +930,12 @@ async def get_ta_setup_v2(
         "scenarios": scenarios_v3,
     })
     
+    # =============================================
+    # LIQUIDITY ENGINE — Market Mechanics Layer
+    # =============================================
+    liquidity_engine = get_liquidity_engine()
+    liquidity = liquidity_engine.build(candles)
+    
     return {
         "symbol": f"{clean_symbol}USDT",
         "timeframe": normalized_tf,
@@ -949,6 +956,9 @@ async def get_ta_setup_v2(
         
         # BASE LAYER — always visible on chart
         "base_layer": base_layer,
+        
+        # LIQUIDITY — Market Mechanics Layer (NEW!)
+        "liquidity": liquidity,
         
         # STRUCTURE VISUALIZATION — the explanation layer (HH/HL/LH/LL, BOS/CHOCH)
         "structure_visualization": result.get("structure_visualization", {
