@@ -16,6 +16,7 @@ import React, { useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { createChart, CandlestickSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
 import { MarketMechanicsRenderer } from '../../../components/chart-engine/MarketMechanicsLayer';
+import { renderNarrative } from '../../../components/chart-engine/narrative';
 
 const ChartWrapper = styled.div`
   position: relative;
@@ -251,10 +252,13 @@ const ResearchChart = ({
   showLiquidity = true,
   showSweeps = true,
   showCHOCH = true,
+  showNarrative = true,  // NEW: Narrative layer
+  decision = null,       // NEW: For narrative entry logic
 }) => {
   const chartRef = useRef(null);
   const chartInstanceRef = useRef(null);
   const mmRendererRef = useRef(null);
+  const narrativeRef = useRef(null);
 
   useEffect(() => {
     if (!chartRef.current || candles.length === 0) return;
@@ -381,6 +385,31 @@ const ResearchChart = ({
         }
       );
       mmRendererRef.current = mmRenderer;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // NARRATIVE LAYER — Market Story
+    // ═══════════════════════════════════════════════════════════════
+    if (showNarrative && (liquidity || displacement || chochValidation || poi)) {
+      try {
+        const narrativeData = {
+          liquidity,
+          displacement,
+          chochValidation,
+          poi,
+          decision,
+          tradeSetup,
+        };
+        
+        narrativeRef.current = renderNarrative(chart, priceSeries, narrativeData, candles);
+        
+        // Log narrative summary for debugging
+        if (narrativeRef.current?.summary) {
+          console.log('[Narrative]', narrativeRef.current.summary.chain);
+        }
+      } catch (e) {
+        console.warn('Narrative render failed:', e);
+      }
     }
 
     // 2. RENDER STRUCTURE MARKERS (HH/HL/LH/LL + CHOCH/BOS) — native chart markers
@@ -702,7 +731,7 @@ const ResearchChart = ({
         chartInstanceRef.current = null;
       }
     };
-  }, [candles, chartType, height, levels, setup, pattern, baseLayer, structureVisualization, tradeSetup, showLevels, showPattern, showBaseLayer, showStructure, showTargets, showExecutionOverlay, poi, liquidity, chochValidation, displacement, showMarketMechanics, showPOI, showLiquidity, showSweeps, showCHOCH]);
+  }, [candles, chartType, height, levels, setup, pattern, baseLayer, structureVisualization, tradeSetup, showLevels, showPattern, showBaseLayer, showStructure, showTargets, showExecutionOverlay, poi, liquidity, chochValidation, displacement, showMarketMechanics, showPOI, showLiquidity, showSweeps, showCHOCH, showNarrative, decision]);
 
   const direction = pattern?.direction || setup?.direction || 'neutral';
   const confidence = pattern?.total_score || pattern?.confidence || setup?.confidence || 0;

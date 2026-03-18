@@ -40,6 +40,7 @@ import PatternsBlock from '../components/PatternsBlock';
 import ConfidenceExplanation from '../components/ConfidenceExplanation';
 import ExplanationPanel from '../components/ExplanationPanel';
 import setupService from '../../../services/setupService';
+import { buildNarrative, NarrativeSummary } from '../../../components/chart-engine/narrative';
 
 // ============================================
 // STYLED COMPONENTS
@@ -907,12 +908,29 @@ const ResearchView = () => {
             showLiquidity={true}
             showSweeps={true}
             showCHOCH={true}
+            showNarrative={true}
+            decision={decision}
           />
           {loading && (
             <LoadingOverlay>
               <Loader2 size={24} color="#3b82f6" />
               <span style={{ color: '#64748b', fontSize: 13 }}>Analyzing {symbol}...</span>
             </LoadingOverlay>
+          )}
+          
+          {/* NARRATIVE SUMMARY — Market Story Chain */}
+          {!loading && (
+            <NarrativeSummary
+              narrative={buildNarrative({
+                liquidity,
+                displacement,
+                chochValidation,
+                poi,
+                decision,
+                tradeSetup,
+              })}
+              decision={decision}
+            />
           )}
         </ChartSection>
 
