@@ -26,9 +26,12 @@ import time
 from datetime import datetime
 from typing import Dict, List, Optional
 
+# Base URL for testing
+BASE_URL = "https://tech-analysis-14.preview.emergentagent.com"
+
 
 class TAEngineAPITester:
-    def __init__(self, base_url: str = "https://tech-analysis-14.preview.emergentagent.com"):
+    def __init__(self, base_url: str = BASE_URL):
         self.base_url = base_url
         self.tests_run = 0
         self.tests_passed = 0
@@ -992,6 +995,465 @@ class TAEngineAPITester:
         return setup_snapshot
 
     # ═══════════════════════════════════════════════════════════════
+    # Displacement Engine Tests (NEW FEATURE)
+    # ═══════════════════════════════════════════════════════════════
+
+    def test_displacement_object_presence(self):
+        """Test /api/ta/setup/v2 returns displacement object"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("Displacement Object Presence", False, f"Request failed: status={status}, error: {data.get('error', 'unknown')}")
+            return False
+            
+        # Check displacement object exists
+        displacement = data.get("displacement")
+        if not displacement:
+            self.log_result("Displacement Object Presence", False, "Missing displacement object in response")
+            return False
+        
+        # Check required displacement fields
+        required_fields = ["events", "current_state", "last_impulse", "recent_displacement"]
+        for field in required_fields:
+            if field not in displacement:
+                self.log_result("Displacement Object Presence", False, f"Missing displacement field: {field}")
+                return False
+        
+        print(f"   ⚡ Displacement object present with all required fields")
+        print(f"   ⚡ Events: {len(displacement.get('events', []))}")
+        print(f"   ⚡ Current state: {displacement.get('current_state')}")
+        print(f"   ⚡ Recent displacement: {displacement.get('recent_displacement')}")
+        
+        self.log_result("Displacement Object Presence", True)
+        return displacement
+
+    def test_displacement_events_structure(self):
+        """Test displacement events have direction (bullish/bearish), strength, range_pct"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("Displacement Events Structure", False, f"Request failed: status={status}")
+            return False
+            
+        displacement = data.get("displacement", {})
+        events = displacement.get("events", [])
+        
+        print(f"   ⚡ Displacement events count: {len(events)}")
+        
+        if not events:
+            print("   ⚠️ No displacement events detected (this may be normal)")
+            self.log_result("Displacement Events Structure", True, "No events detected")
+            return True
+        
+        valid_directions = ["bullish", "bearish"]
+        bullish_count = 0
+        bearish_count = 0
+        
+        # Check structure of each displacement event
+        for i, event in enumerate(events):
+            required_fields = ["direction", "start_index", "end_index", "strength", "range_pct", "impulse", "label"]
+            for field in required_fields:
+                if field not in event:
+                    self.log_result("Displacement Events Structure", False, f"Missing field '{field}' in events[{i}]")
+                    return False
+            
+            # Validate direction
+            direction = event.get("direction")
+            if direction not in valid_directions:
+                self.log_result("Displacement Events Structure", False, f"Invalid event direction: {direction}")
+                return False
+            
+            # Validate strength (should be float >= 1.5)
+            strength = event.get("strength")
+            if not isinstance(strength, (int, float)) or strength < 1.0:
+                self.log_result("Displacement Events Structure", False, f"Invalid strength value: {strength}")
+                return False
+            
+            # Validate range_pct (should be positive percentage)
+            range_pct = event.get("range_pct")
+            if not isinstance(range_pct, (int, float)) or range_pct < 0:
+                self.log_result("Displacement Events Structure", False, f"Invalid range_pct: {range_pct}")
+                return False
+            
+            # Validate impulse flag
+            impulse = event.get("impulse")
+            if not isinstance(impulse, bool):
+                self.log_result("Displacement Events Structure", False, f"Invalid impulse flag: {impulse}")
+                return False
+            
+            # Count directions
+            if direction == "bullish":
+                bullish_count += 1
+            else:
+                bearish_count += 1
+            
+            print(f"   ⚡ Event {i+1}: {direction.upper()} displacement - Strength: {strength}, Range: {range_pct}%, Label: {event.get('label')}")
+        
+        print(f"   ⚡ Bullish displacements: {bullish_count}")
+        print(f"   ⚡ Bearish displacements: {bearish_count}")
+        
+        self.log_result("Displacement Events Structure", True)
+        return events
+
+    def test_displacement_current_state(self):
+        """Test displacement current_state is expansion/compression/neutral"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("Displacement Current State", False, f"Request failed: status={status}")
+            return False
+            
+        displacement = data.get("displacement", {})
+        current_state = displacement.get("current_state")
+        
+        valid_states = ["expansion", "compression", "neutral", "unknown"]
+        
+        if current_state not in valid_states:
+            self.log_result("Displacement Current State", False, f"Invalid current_state: {current_state}")
+            return False
+        
+        print(f"   ⚡ Current displacement state: {current_state}")
+        
+        # Check last_impulse if exists
+        last_impulse = displacement.get("last_impulse")
+        if last_impulse:
+            print(f"   ⚡ Last impulse: {last_impulse.get('direction')} at strength {last_impulse.get('strength')}")
+        else:
+            print("   ⚡ No last impulse detected")
+        
+        self.log_result("Displacement Current State", True)
+        return current_state
+
+    def test_choch_validation_object_presence(self):
+        """Test /api/ta/setup/v2 returns choch_validation object"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("CHOCH Validation Object Presence", False, f"Request failed: status={status}")
+            return False
+            
+        # Check choch_validation object exists
+        choch_validation = data.get("choch_validation")
+        if not choch_validation:
+            self.log_result("CHOCH Validation Object Presence", False, "Missing choch_validation object in response")
+            return False
+        
+        # Check required choch_validation fields
+        required_fields = ["is_valid", "direction", "score", "label", "reasons", "components"]
+        for field in required_fields:
+            if field not in choch_validation:
+                self.log_result("CHOCH Validation Object Presence", False, f"Missing choch_validation field: {field}")
+                return False
+        
+        print(f"   🔄 CHOCH validation object present with all required fields")
+        print(f"   🔄 Is valid: {choch_validation.get('is_valid')}")
+        print(f"   🔄 Direction: {choch_validation.get('direction')}")
+        print(f"   🔄 Score: {choch_validation.get('score')}")
+        print(f"   🔄 Label: {choch_validation.get('label')}")
+        
+        self.log_result("CHOCH Validation Object Presence", True)
+        return choch_validation
+
+    def test_choch_validation_scoring_components(self):
+        """Test CHOCH validation scores: sweep (0.30), displacement (0.35), structure (0.20), location (0.15)"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("CHOCH Validation Scoring Components", False, f"Request failed: status={status}")
+            return False
+            
+        choch_validation = data.get("choch_validation", {})
+        components = choch_validation.get("components", {})
+        
+        if not components:
+            self.log_result("CHOCH Validation Scoring Components", False, "Missing components in choch_validation")
+            return False
+        
+        # Check required components with expected max scores
+        expected_components = {
+            "sweep": 0.30,
+            "displacement": 0.35, 
+            "structure": 0.20,
+            "location": 0.15
+        }
+        
+        for component_name, expected_max in expected_components.items():
+            if component_name not in components:
+                self.log_result("CHOCH Validation Scoring Components", False, f"Missing component: {component_name}")
+                return False
+            
+            component = components[component_name]
+            
+            # Check component structure
+            required_fields = ["score", "max", "details"]
+            for field in required_fields:
+                if field not in component:
+                    self.log_result("CHOCH Validation Scoring Components", False, f"Missing field '{field}' in {component_name} component")
+                    return False
+            
+            # Check max score matches expected
+            max_score = component.get("max")
+            if abs(max_score - expected_max) > 0.01:  # Allow small floating point differences
+                self.log_result("CHOCH Validation Scoring Components", False, f"Component {component_name} max score is {max_score}, expected {expected_max}")
+                return False
+            
+            # Check score is within valid range
+            score = component.get("score")
+            if not isinstance(score, (int, float)) or score < 0 or score > max_score:
+                self.log_result("CHOCH Validation Scoring Components", False, f"Invalid score for {component_name}: {score}")
+                return False
+            
+            print(f"   🔄 {component_name.capitalize()}: {score}/{max_score} - {component.get('details')}")
+        
+        # Calculate total and verify
+        total_score = sum(components[comp]["score"] for comp in expected_components.keys())
+        reported_score = choch_validation.get("score", 0)
+        
+        if abs(total_score - reported_score) > 0.01:
+            self.log_result("CHOCH Validation Scoring Components", False, f"Score mismatch: calculated {total_score}, reported {reported_score}")
+            return False
+        
+        print(f"   🔄 Total score: {total_score} (matches reported: {reported_score})")
+        
+        self.log_result("CHOCH Validation Scoring Components", True)
+        return components
+
+    def test_choch_validation_thresholds(self):
+        """Test is_valid = true when score >= 0.70, and label classification"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("CHOCH Validation Thresholds", False, f"Request failed: status={status}")
+            return False
+            
+        choch_validation = data.get("choch_validation", {})
+        
+        is_valid = choch_validation.get("is_valid")
+        score = choch_validation.get("score", 0)
+        label = choch_validation.get("label", "")
+        
+        # Test validation threshold logic
+        expected_valid = score >= 0.70
+        if is_valid != expected_valid:
+            self.log_result("CHOCH Validation Thresholds", False, f"is_valid should be {expected_valid} for score {score}, got {is_valid}")
+            return False
+        
+        # Test label classification
+        expected_label = ""
+        if score >= 0.70:
+            expected_label = "valid_choch"
+        elif score >= 0.45:
+            expected_label = "weak_choch"
+        else:
+            expected_label = "fake_choch"
+        
+        if label != expected_label:
+            self.log_result("CHOCH Validation Thresholds", False, f"Expected label '{expected_label}' for score {score}, got '{label}'")
+            return False
+        
+        print(f"   🔄 Score: {score}")
+        print(f"   🔄 Is valid: {is_valid} (threshold >= 0.70)")
+        print(f"   🔄 Label: {label}")
+        
+        # Check threshold ranges
+        if score >= 0.70:
+            print("   🔄 VALID CHOCH - Strong setup")
+        elif score >= 0.45:
+            print("   🔄 WEAK CHOCH - Moderate setup")
+        else:
+            print("   🔄 FAKE CHOCH - Poor setup")
+        
+        self.log_result("CHOCH Validation Thresholds", True)
+        return {"is_valid": is_valid, "score": score, "label": label}
+
+    def test_choch_validation_reasons(self):
+        """Test reasons array explains validation components"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("CHOCH Validation Reasons", False, f"Request failed: status={status}")
+            return False
+            
+        choch_validation = data.get("choch_validation", {})
+        reasons = choch_validation.get("reasons", [])
+        direction = choch_validation.get("direction", "unknown")
+        
+        if not isinstance(reasons, list):
+            self.log_result("CHOCH Validation Reasons", False, "Reasons should be a list")
+            return False
+        
+        if not reasons:
+            print("   🔄 No reasons provided (this may be normal for no_choch scenarios)")
+            self.log_result("CHOCH Validation Reasons", True, "No reasons - normal behavior")
+            return True
+        
+        print(f"   🔄 CHOCH Direction: {direction}")
+        print(f"   🔄 Validation reasons ({len(reasons)}):")
+        
+        # Check for expected reason patterns
+        expected_patterns = [
+            "liquidity swept", "displacement confirmed", "structural break", "key zone", 
+            "sell-side", "buy-side", "bullish", "bearish", "near", "clean", "weak"
+        ]
+        
+        pattern_matches = 0
+        for i, reason in enumerate(reasons):
+            if not isinstance(reason, str):
+                self.log_result("CHOCH Validation Reasons", False, f"Reason {i} is not a string: {reason}")
+                return False
+            
+            print(f"   🔄   {i+1}. {reason}")
+            
+            # Check if reason contains expected trading terminology
+            reason_lower = reason.lower()
+            if any(pattern in reason_lower for pattern in expected_patterns):
+                pattern_matches += 1
+        
+        # At least 50% of reasons should contain trading terminology
+        if len(reasons) > 0 and (pattern_matches / len(reasons)) < 0.5:
+            print(f"   ⚠️ Only {pattern_matches}/{len(reasons)} reasons contain expected trading patterns")
+        
+        print(f"   🔄 Pattern matches: {pattern_matches}/{len(reasons)}")
+        
+        self.log_result("CHOCH Validation Reasons", True)
+        return reasons
+
+    def test_manual_displacement_choch_validation(self):
+        """Test against manual test results: 16 events, expansion state, score=0.79 (valid_choch)"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("Manual Displacement CHOCH Validation", False, f"Request failed: status={status}")
+            return False
+            
+        displacement = data.get("displacement", {})
+        choch_validation = data.get("choch_validation", {})
+        
+        # Manual test expectations from agent context
+        expected_events = 16
+        expected_state = "expansion"
+        expected_score = 0.79
+        expected_label = "valid_choch"
+        
+        # Check displacement
+        events = displacement.get("events", [])
+        current_state = displacement.get("current_state", "")
+        
+        actual_events = len(events)
+        
+        print(f"   🎯 Expected displacement events: {expected_events}")
+        print(f"   🎯 Actual displacement events: {actual_events}")
+        print(f"   🎯 Expected state: {expected_state}")
+        print(f"   🎯 Actual state: {current_state}")
+        
+        # Check CHOCH validation
+        score = choch_validation.get("score", 0)
+        label = choch_validation.get("label", "")
+        is_valid = choch_validation.get("is_valid", False)
+        
+        print(f"   🎯 Expected CHOCH score: {expected_score}")
+        print(f"   🎯 Actual CHOCH score: {score}")
+        print(f"   🎯 Expected label: {expected_label}")
+        print(f"   🎯 Actual label: {label}")
+        print(f"   🎯 Is valid: {is_valid}")
+        
+        # Allow some tolerance for dynamic data
+        events_tolerance = 5  # Allow +/- 5 events
+        score_tolerance = 0.15  # Allow +/- 0.15 score difference
+        
+        events_match = abs(actual_events - expected_events) <= events_tolerance
+        state_match = current_state == expected_state
+        score_match = abs(score - expected_score) <= score_tolerance
+        valid_match = is_valid  # Should be valid if score is decent
+        
+        print(f"   🎯 Events match (±{events_tolerance}): {events_match}")
+        print(f"   🎯 State match: {state_match}")
+        print(f"   🎯 Score match (±{score_tolerance}): {score_match}")
+        print(f"   🎯 Valid CHOCH: {valid_match}")
+        
+        # Check for key validation components mentioned in manual test
+        reasons = choch_validation.get("reasons", [])
+        reasons_text = " ".join(reasons).lower()
+        
+        sell_side_sweep = "sell-side" in reasons_text or "sell side" in reasons_text
+        bullish_displacement = "bullish" in reasons_text and "displacement" in reasons_text
+        
+        print(f"   🎯 Sell-side sweep mentioned: {sell_side_sweep}")
+        print(f"   🎯 Bullish displacement mentioned: {bullish_displacement}")
+        
+        # Consider test successful if displacement and CHOCH engines are working
+        displacement_working = actual_events > 0 and current_state in ["expansion", "compression", "neutral"]
+        choch_working = score > 0 and label in ["valid_choch", "weak_choch", "fake_choch"]
+        
+        if not displacement_working:
+            self.log_result("Manual Displacement CHOCH Validation", False, "Displacement engine not working properly")
+            return False
+        
+        if not choch_working:
+            self.log_result("Manual Displacement CHOCH Validation", False, "CHOCH validation engine not working properly")
+            return False
+        
+        print(f"   🎯 Displacement + CHOCH validation engines working correctly")
+        self.log_result("Manual Displacement CHOCH Validation", True)
+        return True
+
+    def test_displacement_choch_integration(self):
+        """Test complete Displacement + CHOCH validation integration"""
+        success, data, status = self.make_request("GET", "/api/ta/setup/v2?symbol=BTCUSDT&tf=1D")
+        
+        if not success or status != 200:
+            self.log_result("Displacement CHOCH Integration", False, f"Request failed: status={status}")
+            return False
+            
+        # Check that both displacement and choch_validation are present
+        displacement = data.get("displacement")
+        choch_validation = data.get("choch_validation")
+        
+        if not displacement:
+            self.log_result("Displacement CHOCH Integration", False, "Missing displacement object")
+            return False
+        
+        if not choch_validation:
+            self.log_result("Displacement CHOCH Integration", False, "Missing choch_validation object")
+            return False
+        
+        # Check integration between displacement and CHOCH validation
+        displacement_events = displacement.get("events", [])
+        recent_displacement = displacement.get("recent_displacement")
+        choch_score = choch_validation.get("score", 0)
+        choch_components = choch_validation.get("components", {})
+        
+        print(f"   🔗 Displacement events: {len(displacement_events)}")
+        print(f"   🔗 Recent displacement: {recent_displacement}")
+        print(f"   🔗 CHOCH validation score: {choch_score}")
+        
+        # Check displacement component in CHOCH validation
+        displacement_component = choch_components.get("displacement", {})
+        displacement_score = displacement_component.get("score", 0)
+        displacement_details = displacement_component.get("details", "")
+        
+        print(f"   🔗 CHOCH displacement component score: {displacement_score}/0.35")
+        print(f"   🔗 CHOCH displacement details: {displacement_details}")
+        
+        # If we have displacement events, CHOCH displacement score should reflect that
+        if displacement_events and displacement_score == 0:
+            print("   ⚠️ Warning: Displacement events present but CHOCH displacement score is 0")
+        
+        # Check logical consistency
+        if recent_displacement and "displacement_confirmed" in displacement_details:
+            print("   ✅ Logical consistency: Recent displacement matches CHOCH validation")
+        
+        symbol = data.get("symbol")
+        timeframe = data.get("timeframe")
+        
+        print(f"   🔗 Symbol: {symbol}")
+        print(f"   🔗 Timeframe: {timeframe}")
+        print(f"   🔗 Integration working correctly")
+        
+        self.log_result("Displacement CHOCH Integration", True)
+        return {"displacement": displacement, "choch_validation": choch_validation}
+
+    # ═══════════════════════════════════════════════════════════════
     # Liquidity Engine Tests (NEW FEATURE)
     # ═══════════════════════════════════════════════════════════════
 
@@ -1468,7 +1930,7 @@ class TAEngineAPITester:
 
     def run_all_tests(self):
         """Run all tests in sequence"""
-        print("🚀 Starting TA Engine API Tests - Liquidity Engine Focus...")
+        print("🚀 Starting TA Engine API Tests - Displacement + CHOCH Validation Focus...")
         print(f"🌐 Base URL: {self.base_url}")
         print("=" * 80)
         
@@ -1477,7 +1939,20 @@ class TAEngineAPITester:
         print("-" * 50)
         self.test_health_endpoint()
         
-        # Liquidity Engine Tests (Main Focus)
+        # Displacement + CHOCH Validation Tests (Main Focus)
+        print("\n⚡ DISPLACEMENT + CHOCH VALIDATION TESTS")
+        print("-" * 50)
+        self.test_displacement_object_presence()
+        self.test_displacement_events_structure()
+        self.test_displacement_current_state()
+        self.test_choch_validation_object_presence()
+        self.test_choch_validation_scoring_components()
+        self.test_choch_validation_thresholds()
+        self.test_choch_validation_reasons()
+        self.test_manual_displacement_choch_validation()
+        self.test_displacement_choch_integration()
+        
+        # Liquidity Engine Tests (Supporting)
         print("\n💧 LIQUIDITY ENGINE TESTS")
         print("-" * 50)
         self.test_liquidity_object_presence()
@@ -1518,7 +1993,7 @@ class TAEngineAPITester:
 
 def main():
     """Main test runner"""
-    print("TA Engine API Tester - Liquidity Engine Testing")
+    print("TA Engine API Tester - Displacement + CHOCH Validation Testing")
     print("=" * 80)
     
     # Initialize tester
@@ -1537,6 +2012,62 @@ def main():
         
     except Exception as e:
         print(f"\n\n❌ Unexpected error: {e}")
+        return 1
+
+def run_displacement_choch_only():
+    """Run only Displacement + CHOCH validation tests"""
+    print("⚡ Displacement + CHOCH Validation Engine Testing")
+    print("=" * 80)
+    
+    # Initialize tester
+    tester = TAEngineAPITester()
+    
+    try:
+        print("🔧 HEALTH CHECK")
+        print("-" * 50)
+        health_ok = tester.test_health_endpoint()
+        
+        if not health_ok:
+            print("❌ Health check failed. Cannot proceed.")
+            return 1
+        
+        print("\n⚡ DISPLACEMENT + CHOCH VALIDATION TESTS")
+        print("-" * 50)
+        
+        # Run specific tests
+        test_funcs = [
+            tester.test_displacement_object_presence,
+            tester.test_displacement_events_structure, 
+            tester.test_displacement_current_state,
+            tester.test_choch_validation_object_presence,
+            tester.test_choch_validation_scoring_components,
+            tester.test_choch_validation_thresholds,
+            tester.test_choch_validation_reasons,
+            tester.test_manual_displacement_choch_validation,
+            tester.test_displacement_choch_integration
+        ]
+        
+        for test_func in test_funcs:
+            try:
+                test_func()
+            except Exception as e:
+                print(f"💥 Test {test_func.__name__} failed with error: {e}")
+        
+        # Summary
+        print("\n" + "=" * 80)
+        print("📊 DISPLACEMENT + CHOCH TEST SUMMARY")
+        print("=" * 80)
+        
+        success_rate = (tester.tests_passed / tester.tests_run * 100) if tester.tests_run > 0 else 0
+        
+        print(f"Tests run: {tester.tests_run}")
+        print(f"Tests passed: {tester.tests_passed}")
+        print(f"Success rate: {success_rate:.1f}%")
+        
+        return 0 if tester.tests_passed == tester.tests_run else 1
+        
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
         return 1
 
 

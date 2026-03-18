@@ -45,11 +45,12 @@ import modules.ta_engine.setup.pattern_detectors_unified  # Auto-registers detec
 # Decision and Scenario engines
 from modules.ta_engine.decision import build_decision, get_decision_engine_v2
 from modules.ta_engine.scenario import generate_scenarios, build_confidence_explanation, get_scenario_engine_v3
-from modules.ta_engine.structure import get_structure_visualization_builder
+from modules.ta_engine.structure import get_structure_visualization_builder, get_choch_validation_engine
 from modules.ta_engine.intelligence import build_mtf_context
 from modules.ta_engine.explanation import get_explanation_engine_v1, get_explanation_engine_v2
 from modules.ta_engine.trade_setup import get_trade_setup_generator
 from modules.ta_engine.liquidity import get_liquidity_engine
+from modules.ta_engine.displacement import get_displacement_engine
 
 
 # =============================================================================
@@ -936,6 +937,23 @@ async def get_ta_setup_v2(
     liquidity_engine = get_liquidity_engine()
     liquidity = liquidity_engine.build(candles)
     
+    # =============================================
+    # DISPLACEMENT ENGINE — Impulse/Strength Detection
+    # =============================================
+    displacement_engine = get_displacement_engine()
+    displacement = displacement_engine.build(candles)
+    
+    # =============================================
+    # CHOCH VALIDATION ENGINE — Structure Shift Validation
+    # =============================================
+    choch_engine = get_choch_validation_engine()
+    choch_validation = choch_engine.build(
+        structure_context=result.get("structure_context", {}),
+        liquidity=liquidity,
+        displacement=displacement,
+        base_layer=base_layer,
+    )
+    
     return {
         "symbol": f"{clean_symbol}USDT",
         "timeframe": normalized_tf,
@@ -957,8 +975,14 @@ async def get_ta_setup_v2(
         # BASE LAYER — always visible on chart
         "base_layer": base_layer,
         
-        # LIQUIDITY — Market Mechanics Layer (NEW!)
+        # LIQUIDITY — Market Mechanics Layer
         "liquidity": liquidity,
+        
+        # DISPLACEMENT — Impulse/Strength Detection
+        "displacement": displacement,
+        
+        # CHOCH VALIDATION — Structure Shift Validation (NEW!)
+        "choch_validation": choch_validation,
         
         # STRUCTURE VISUALIZATION — the explanation layer (HH/HL/LH/LL, BOS/CHOCH)
         "structure_visualization": result.get("structure_visualization", {
