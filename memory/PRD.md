@@ -65,6 +65,15 @@ Analysis → Decision → Scenario → Execution → Visualization
 - Current test: 5 zones, 1 active (SUPPLY @ 105447), 4 mitigated
 - All tests passed (100%)
 
+### 2026-03-18: Market Mechanics Visualization Layer ✅
+- MarketMechanicsRenderer renders POI, Liquidity, Sweeps, CHOCH on chart
+- POI zones as colored rectangles (demand=green, supply=red)
+- Liquidity lines as dashed EQH/EQL price lines
+- Sweep markers as BSL/SSL arrows
+- CHOCH validation label (VALID/WEAK/FAKE)
+- Maximum 5-7 elements (no visual noise)
+- Frontend compiles successfully
+
 ## API Endpoints
 - `GET /api/ta/setup/v2?symbol=BTCUSDT&tf=1D` — Full analysis pipeline
 - `GET /api/health` — Health check

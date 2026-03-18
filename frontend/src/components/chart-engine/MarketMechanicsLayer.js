@@ -16,7 +16,7 @@
  * - POI visible immediately
  */
 
-import { LineSeries, AreaSeries } from 'lightweight-charts';
+import { LineSeries, AreaSeries, createSeriesMarkers } from 'lightweight-charts';
 
 // ═══════════════════════════════════════════════════════════════
 // COLORS — Market Mechanics Palette
@@ -68,9 +68,11 @@ export class MarketMechanicsRenderer {
     // Remove series
     this.renderedSeries.forEach(series => {
       try {
-        this.chart.removeSeries(series);
+        if (series && this.chart) {
+          this.chart.removeSeries(series);
+        }
       } catch (e) {
-        console.warn('Failed to remove series:', e);
+        // Ignore errors during cleanup
       }
     });
     this.renderedSeries = [];
@@ -78,9 +80,11 @@ export class MarketMechanicsRenderer {
     // Remove price lines
     this.renderedPriceLines.forEach(line => {
       try {
-        this.priceSeries.removePriceLine(line);
+        if (line && this.priceSeries) {
+          this.priceSeries.removePriceLine(line);
+        }
       } catch (e) {
-        console.warn('Failed to remove price line:', e);
+        // Ignore errors during cleanup
       }
     });
     this.renderedPriceLines = [];
@@ -343,8 +347,7 @@ export class MarketMechanicsRenderer {
 
   _setMarkers(markers) {
     try {
-      // Use lightweight-charts createSeriesMarkers
-      const { createSeriesMarkers } = require('lightweight-charts');
+      // Import already available at top of file
       createSeriesMarkers(this.priceSeries, markers);
     } catch (e) {
       console.warn('Failed to set markers:', e);
