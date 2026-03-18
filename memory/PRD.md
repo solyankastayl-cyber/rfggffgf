@@ -28,6 +28,14 @@ Analysis → Decision → Scenario → Execution → Visualization
 - ExplanationPanel (frontend) updated for V2 format
 - All 11 backend tests passed (100%)
 
+### 2026-03-18: My Ideas Module ✅
+- Full CRUD API: create, list, get, update, delete, timeline
+- Versioning: each update creates NEW version (не перезаписывает)
+- Snapshot stores: decision, scenarios, trade_setup, explanation
+- Validation system: track accuracy, target hits, invalidations
+- Timeline endpoint shows version history
+- All 9 backend tests passed (100%)
+
 ## API Endpoints
 - `GET /api/ta/setup/v2?symbol=BTCUSDT&tf=1D` — Full analysis pipeline
 - `GET /api/health` — Health check
