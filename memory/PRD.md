@@ -43,6 +43,20 @@ Analysis → Decision → Scenario → Execution → Visualization
 - Integrated into /api/ta/setup/v2 pipeline
 - All 9 backend tests passed (100%)
 
+### 2026-03-18: Displacement Engine ✅
+- Impulse/strength detection
+- Detects strong directional moves (displacement)
+- Market state: expansion | compression | neutral
+- 16 impulse events detected, current_state = expansion
+- All 9 backend tests passed (100%)
+
+### 2026-03-18: CHOCH Validation Engine ✅
+- CHOCH alone = nothing. CHOCH + sweep + displacement = signal
+- Scoring: sweep (0.30) + displacement (0.35) + structure (0.20) + location (0.15)
+- Thresholds: >= 0.70 = valid, 0.45-0.69 = weak, < 0.45 = fake
+- Current test: score 0.79 = VALID CHOCH
+- All 9 backend tests passed (100%)
+
 ## API Endpoints
 - `GET /api/ta/setup/v2?symbol=BTCUSDT&tf=1D` — Full analysis pipeline
 - `GET /api/health` — Health check
