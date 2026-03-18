@@ -648,6 +648,14 @@ const ResearchView = () => {
   // MTF CONTEXT — multi-timeframe intelligence
   const mtfContext = setupData?.mtf_context || null;
   
+  // ═══════════════════════════════════════════════════════════════
+  // MARKET MECHANICS — POI, Liquidity, Sweeps, CHOCH Validation
+  // ═══════════════════════════════════════════════════════════════
+  const poi = setupData?.poi || null;
+  const liquidity = setupData?.liquidity || null;
+  const chochValidation = setupData?.choch_validation || null;
+  const displacement = setupData?.displacement || null;
+  
   // Handle pattern click (switch between primary/alternatives)
   const handlePatternClick = (patternId) => {
     setActivePatternId(patternId);
@@ -880,14 +888,25 @@ const ResearchView = () => {
             baseLayer={baseLayer}
             structureVisualization={structureVisualization}
             tradeSetup={tradeSetup}
+            // Market Mechanics
+            poi={poi}
+            liquidity={liquidity}
+            chochValidation={chochValidation}
+            displacement={displacement}
             chartType={chartType}
             height={420}
             showLevels={layerVisibility.levels}
             showPattern={layerVisibility.patterns}
             showBaseLayer={layerVisibility.baseLayer}
-            showStructure={true}
+            showStructure={false}  // Disabled - using Market Mechanics now
             showTargets={false}
             showExecutionOverlay={true}
+            // Market Mechanics toggles
+            showMarketMechanics={true}
+            showPOI={true}
+            showLiquidity={true}
+            showSweeps={true}
+            showCHOCH={true}
           />
           {loading && (
             <LoadingOverlay>

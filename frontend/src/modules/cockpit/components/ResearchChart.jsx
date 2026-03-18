@@ -15,6 +15,7 @@
 import React, { useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { createChart, CandlestickSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
+import { MarketMechanicsRenderer } from '../../../components/chart-engine/MarketMechanicsLayer';
 
 const ChartWrapper = styled.div`
   position: relative;
@@ -229,19 +230,31 @@ const ResearchChart = ({
   setup = null,
   structure = null,
   baseLayer = null,
-  structureVisualization = null,  // NEW: HH/HL/LH/LL, BOS/CHOCH, trendlines
+  structureVisualization = null,  // HH/HL/LH/LL, BOS/CHOCH, trendlines
   tradeSetup = null,  // EXECUTION OVERLAY: entry_zone, stop_loss, targets
+  // NEW: Market Mechanics props
+  poi = null,
+  liquidity = null,
+  chochValidation = null,
+  displacement = null,
   chartType = 'candles',
   height = 400,
   showLevels = true,
   showPattern = true,
   showBaseLayer = true,
-  showStructure = true,  // Changed default to true
+  showStructure = true,
   showTargets = true,
-  showExecutionOverlay = true,  // NEW: entry/stop/target visualization
+  showExecutionOverlay = true,
+  // NEW: Market Mechanics toggles
+  showMarketMechanics = true,
+  showPOI = true,
+  showLiquidity = true,
+  showSweeps = true,
+  showCHOCH = true,
 }) => {
   const chartRef = useRef(null);
   const chartInstanceRef = useRef(null);
+  const mmRendererRef = useRef(null);
 
   useEffect(() => {
     if (!chartRef.current || candles.length === 0) return;
@@ -334,8 +347,35 @@ const ResearchChart = ({
 
     priceSeries.setData(mapped);
 
+    // ═══════════════════════════════════════════════════════════════
+    // MARKET MECHANICS LAYER (POI, Liquidity, Sweeps, CHOCH)
+    // ═══════════════════════════════════════════════════════════════
+    if (showMarketMechanics && (poi || liquidity || chochValidation)) {
+      // Clean up previous renderer
+      if (mmRendererRef.current) {
+        mmRendererRef.current.clear();
+      }
+      
+      // Create new renderer
+      const mmRenderer = new MarketMechanicsRenderer(chart, priceSeries);
+      mmRenderer.render(
+        { poi, liquidity, chochValidation, displacement, candles },
+        { 
+          showPOI, 
+          showLiquidity, 
+          showSweeps, 
+          showCHOCH,
+          maxPOIZones: 3,      // max 3 zones
+          maxLiquidityLines: 4, // max 4 EQH/EQL lines
+          maxSweeps: 2,        // max 2 sweep markers
+        }
+      );
+      mmRendererRef.current = mmRenderer;
+    }
+
     // 2. RENDER STRUCTURE MARKERS (HH/HL/LH/LL + CHOCH/BOS) — native chart markers
-    if (showStructure && structureVisualization) {
+    // NOTE: Disabled when Market Mechanics is enabled (CHOCH is rendered there)
+    if (showStructure && structureVisualization && !showMarketMechanics) {
       const markers = [];
       const eventTimes = new Set();
 
