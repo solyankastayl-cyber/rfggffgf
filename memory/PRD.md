@@ -36,6 +36,13 @@ Analysis → Decision → Scenario → Execution → Visualization
 - Timeline endpoint shows version history
 - All 9 backend tests passed (100%)
 
+### 2026-03-18: Liquidity Engine (Market Mechanics Layer) ✅
+- Equal highs/lows detection (liquidity clusters)
+- Liquidity pools: BSL (buy-side) / SSL (sell-side)
+- Sweep detection: wick through + close back = trap signal
+- Integrated into /api/ta/setup/v2 pipeline
+- All 9 backend tests passed (100%)
+
 ## API Endpoints
 - `GET /api/ta/setup/v2?symbol=BTCUSDT&tf=1D` — Full analysis pipeline
 - `GET /api/health` — Health check
