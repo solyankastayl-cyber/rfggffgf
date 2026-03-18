@@ -52,6 +52,7 @@ from modules.ta_engine.trade_setup import get_trade_setup_generator
 from modules.ta_engine.liquidity import get_liquidity_engine
 from modules.ta_engine.displacement import get_displacement_engine
 from modules.ta_engine.poi import get_poi_engine
+from modules.ta_engine.setup.indicator_engine import get_indicator_engine
 
 
 # =============================================================================
